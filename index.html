@@ -317,6 +317,7 @@ function renderMd(md, base) {
   return div;
 }
 function extract(md, title) {
+  md = md.replace(/\r\n?/g, "\n");
   const re = new RegExp("## " + title + "[^\\n]*\\n\\n````markdown\\n([\\s\\S]*?)\\n````", "");
   const m = md.match(re); return m ? m[1] : null;
 }
