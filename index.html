@@ -324,10 +324,14 @@ let mode = store.get("fcf-mode", "diff");
 function show(p) {
   const f = byPath[p] || byPath["INDEX.md"];
   const doc = document.getElementById("doc");
-  const oldT = extract(f.md, "Ancienne version"), newT = extract(f.md, "Version corrigée");
+  const vo = extract(f.md, "Version originale"), proposed = extract(f.md, "Traduction proposée");
+  const translation = vo !== null && proposed !== null;
+  const oldT = translation ? vo : extract(f.md, "Ancienne version"), newT = translation ? proposed : extract(f.md, "Version corrigée");
+  const oldLabel = translation ? "Version originale (VO)" : "Ancienne version (wiki)";
+  const newLabel = translation ? "Traduction proposée — non votée" : "Version corrigée";
   doc.innerHTML = "";
   if (oldT === null || newT === null) { doc.appendChild(renderMd(f.md, f.path)); finish(f); return; }
-  const head = f.md.split(/\n## Ancienne version/)[0];
+  const head = f.md.split(translation ? /\n## Version originale/ : /\n## Ancienne version/)[0];
   const top = renderMd(head, f.path);
   const h1 = top.querySelector("h1");
   if (h1 && f.statut) h1.insertAdjacentHTML("afterend", `<p><span class="badge" style="background:${COLORS[f.statut] || "#888"}">${esc(f.statut)}</span> ${f.gravite ? "· " + esc(f.gravite) : ""}
@@ -344,26 +348,34 @@ function show(p) {
     raison.value = cur.raison || ""; raison.hidden = cur.etat !== "ignore";
     raison.addEventListener("change", () => { if (etatOf(f.path) === "ignore") setEtats([[f.path, "ignore", raison.value.trim()]]); });
   }
-  const d = diffHtml(oldT, newT);
+  const d = translation ? null : diffHtml(oldT, newT);
+  const activeMode = translation && mode === "diff" ? "cote" : mode;
   const tabs = document.createElement("div"); tabs.className = "tabs";
-  const views = { diff: `Différences (${d.changed} paragraphe${d.changed > 1 ? "s" : ""})`, cote: "Côte à côte", brut: "Texte à copier" };
+  const views = translation ? { cote: "VO / traduction", brut: "Textes à copier" } : { diff: `Différences (${d.changed} paragraphe${d.changed > 1 ? "s" : ""})`, cote: "Côte à côte", brut: "Texte à copier" };
   const zone = document.createElement("div");
   for (const [k, label] of Object.entries(views)) {
-    const b = document.createElement("button"); b.textContent = label; if (k === mode) b.className = "on";
+    const b = document.createElement("button"); b.textContent = label; if (k === activeMode) b.className = "on";
     b.onclick = () => { mode = k; store.set("fcf-mode", k); show(p); }; tabs.appendChild(b);
   }
   doc.append(tabs, zone);
-  if (mode === "diff") zone.innerHTML = `<div class="diff">${d.html}</div><p style="color:var(--muted);font-size:13px">Liens et gras retirés pour lisibilité. <del>barré</del> = supprimé, <ins>souligné vert</ins> = ajouté.</p>`;
-  else if (mode === "brut") {
-    zone.innerHTML = `<div class="cols"><div class="col"><h3>Ancienne version</h3><pre>${esc(oldT)}</pre></div><div class="col new"><button class="copy">Copier</button><h3>Version corrigée</h3><pre>${esc(newT)}</pre></div></div>`;
+  if (activeMode === "diff") zone.innerHTML = `<div class="diff">${d.html}</div><p style="color:var(--muted);font-size:13px">Liens et gras retirés pour lisibilité. <del>barré</del> = supprimé, <ins>souligné vert</ins> = ajouté.</p>`;
+  else if (activeMode === "brut") {
+    zone.innerHTML = `<div class="cols"><div class="col"><h3>${oldLabel}</h3><pre>${esc(oldT)}</pre></div><div class="col new"><button class="copy">Copier</button><h3>${newLabel}</h3><pre>${esc(newT)}</pre></div></div>`;
     zone.querySelector(".copy").onclick = e => { navigator.clipboard.writeText(newT).then(() => e.target.textContent = "Copié ✓"); };
   } else {
     const cols = document.createElement("div"); cols.className = "cols";
     const r1 = renderMd(oldT, f.path), r2 = renderMd(newT, f.path);
-    markSideBySide(r1, r2);
-    const c1 = document.createElement("div"); c1.className = "col"; c1.innerHTML = "<h3>Ancienne version (wiki)</h3>"; c1.appendChild(r1);
-    const c2 = document.createElement("div"); c2.className = "col new"; c2.innerHTML = "<h3>Version corrigée</h3>"; c2.appendChild(r2);
+    if (!translation) markSideBySide(r1, r2);
+    const c1 = document.createElement("div"); c1.className = "col"; c1.innerHTML = `<h3>${oldLabel}</h3>`; c1.appendChild(r1);
+    const c2 = document.createElement("div"); c2.className = "col new"; c2.innerHTML = `<h3>${newLabel}</h3>`; c2.appendChild(r2);
     cols.append(c1, c2); zone.appendChild(cols);
+  }
+  const ecn = extract(f.md, "Traduction ECN examinée");
+  if (ecn !== null) {
+    const details = document.createElement("details");
+    details.innerHTML = "<summary>Voir la traduction ECN examinée — non votée</summary>";
+    details.appendChild(renderMd(ecn, f.path));
+    doc.appendChild(details);
   }
   finish(f);
 }
