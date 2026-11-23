@@ -215,6 +215,54 @@ function diffHtml(oldT, newT) {
   return { html: out.join(""), changed };
 }
 
+// ---------- surlignage des différences dans la vue côte à côte ----------
+// On compare le texte affiché (pas le Markdown), bloc par bloc puis mot par mot,
+// et on entoure les mots changés : rouge barré à gauche, vert à droite.
+function textTokens(block) {
+  const toks = [], w = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+  for (let n = w.nextNode(); n; n = w.nextNode()) for (const t of n.data.split(/(\s+)/)) if (t) toks.push({ t, n });
+  return toks;
+}
+function wrapTokens(toks, changed, tag) {
+  // reconstruit chaque nœud texte en entourant les mots changés
+  const byNode = new Map();
+  toks.forEach((tk, i) => { if (!byNode.has(tk.n)) byNode.set(tk.n, []); byNode.get(tk.n).push([tk.t, changed[i] && /\S/.test(tk.t)]); });
+  for (const [node, parts] of byNode) {
+    if (!parts.some(p => p[1])) continue;
+    const frag = document.createDocumentFragment(); let el = null;
+    for (const [t, ch] of parts) {
+      if (ch) { if (!el) { el = document.createElement(tag); frag.appendChild(el); } el.appendChild(document.createTextNode(t)); }
+      else if (el && /^\s+$/.test(t)) el.appendChild(document.createTextNode(t));
+      else { el = null; frag.appendChild(document.createTextNode(t)); }
+    }
+    node.replaceWith(frag);
+  }
+}
+function markWhole(block, tag) { const t = textTokens(block); wrapTokens(t, t.map(() => true), tag); }
+function markSideBySide(a, b) {
+  const ba = [...a.children], bb = [...b.children];
+  const key = el => el.textContent.replace(/\s+/g, " ").trim();
+  const ops = lcs(ba.map(key), bb.map(key));
+  if (!ops) return;
+  let i = 0, j = 0;
+  for (let k = 0; k < ops.length; k++) {
+    const [o] = ops[k];
+    if (o === "=") { i++; j++; continue; }
+    if (o === "-" && ops[k + 1] && ops[k + 1][0] === "+") {
+      const ta = textTokens(ba[i]), tb = textTokens(bb[j]);
+      const d = lcs(ta.map(x => x.t), tb.map(x => x.t));
+      if (!d) { markWhole(ba[i], "del"); markWhole(bb[j], "ins"); }
+      else {
+        const ca = [], cb = [];
+        for (const [op] of d) { if (op === "=") { ca.push(false); cb.push(false); } else if (op === "-") ca.push(true); else cb.push(true); }
+        wrapTokens(ta, ca, "del"); wrapTokens(tb, cb, "ins");
+      }
+      i++; j++; k++;
+    } else if (o === "-") markWhole(ba[i++], "del");
+    else markWhole(bb[j++], "ins");
+  }
+}
+
 // ---------- rendering ----------
 function resolve(base, href) {
   const parts = base.split("/").slice(0, -1);
@@ -311,8 +359,10 @@ function show(p) {
     zone.querySelector(".copy").onclick = e => { navigator.clipboard.writeText(newT).then(() => e.target.textContent = "Copié ✓"); };
   } else {
     const cols = document.createElement("div"); cols.className = "cols";
-    const c1 = document.createElement("div"); c1.className = "col"; c1.innerHTML = "<h3>Ancienne version (wiki)</h3>"; c1.appendChild(renderMd(oldT, f.path));
-    const c2 = document.createElement("div"); c2.className = "col new"; c2.innerHTML = "<h3>Version corrigée</h3>"; c2.appendChild(renderMd(newT, f.path));
+    const r1 = renderMd(oldT, f.path), r2 = renderMd(newT, f.path);
+    markSideBySide(r1, r2);
+    const c1 = document.createElement("div"); c1.className = "col"; c1.innerHTML = "<h3>Ancienne version (wiki)</h3>"; c1.appendChild(r1);
+    const c2 = document.createElement("div"); c2.className = "col new"; c2.innerHTML = "<h3>Version corrigée</h3>"; c2.appendChild(r2);
     cols.append(c1, c2); zone.appendChild(cols);
   }
   finish(f);
