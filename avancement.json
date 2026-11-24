@@ -138,6 +138,7 @@
  },
  "797189d75ffe586fc74d0dc0": {
   "etat": "ignore",
-  "date": "2026-11-24"
+  "date": "2026-11-24",
+  "raison": "Statut VO pas dans les regles FCF"
  }
 }
