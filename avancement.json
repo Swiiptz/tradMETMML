@@ -124,6 +124,7 @@
  },
  "e7d92c2d23dd5f1980d1b1ba": {
   "etat": "ignore",
-  "date": "2026-11-24"
+  "date": "2026-11-24",
+  "raison": "Mythercellerie accesible uniqument aux non vampires"
  }
 }
